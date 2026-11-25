@@ -64,7 +64,7 @@ npx code-ratchet init
 
 `init` 会自动扫描 `src`、`src-tauri/src`、`crates`、`internal`、`cmd`、`pkg`、`backend`、`server`、`services` 等前后端目录：
 
-- **全语言通用**：单文件行数水位线（新文件默认上限 450 行，超标老文件按现状冻结）。
+- **全语言通用**：单文件行数水位线（新文件默认上限 **800 行**，超标老文件按现状冻结）。若某个核心模块确实内聚偏长，可在文件前 10 行写注释 `// ratchet-max-lines: 1500` 或 `// ratchet-ignore-file` 单独扩容/豁免。
 - **前端 / TS / Tailwind / Tauri**：禁止新增 `: any` / `as any`、禁止新增 Tailwind 任意像素魔法值（自动提示项目 CSS Token）、禁止 `<button>` 非法嵌套、Tauri 前后端 IPC 命令双向对账。
 - **Rust**：禁止在生产代码新增 `.unwrap()`（遇到 `#[cfg(test)]` 或 `#[cfg(all(test, ...))]` 自动停手，绝不误伤单测）。
 - **Go**：禁止在非 `cmd/` 业务包新增 `panic(`。

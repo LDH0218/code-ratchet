@@ -61,7 +61,7 @@ Commit the generated `.ratchet.json`. Repositories **without** `.ratchet.json` a
 
 `code-ratchet init` inspects manifests and source roots (`src`, `src-tauri/src`, `crates`, `internal`, `cmd`, `pkg`, `backend`, `server`, `services`, `app`, `lib`, `Sources`, `packages`) and configures stack-appropriate rules out of the box:
 
-- **All Languages**: Per-file line-count watermarks (`fileSize`, default 450 lines for new files; existing larger files frozen at current line count).
+- **All Languages**: Per-file line-count watermarks (`fileSize`, default **800 lines** for new files; existing larger files frozen at current line count). Legitimately large cohesive modules can declare `// ratchet-max-lines: 1500` or `// ratchet-ignore-file` in the first 10 lines.
 - **TypeScript / JavaScript / Tailwind / UI**:
   - `ts-explicit-any`: Blocks new `: any` / `as any`.
   - `tailwind-arbitrary-px`: Blocks new magic pixel/rem utilities (`text-[11px]`, `rounded-[14px]`) and suggests your CSS theme tokens.

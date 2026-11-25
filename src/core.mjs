@@ -49,6 +49,23 @@ export const DEFAULT_SOURCE_EXTS = [
 
 const MARKUP_EXTS = new Set(['.tsx', '.jsx', '.vue', '.svelte', '.html']);
 
+export const DEFAULT_MAX_LINES = 800;
+
+export function parseHeaderDirectives(content) {
+  let ignoreFile = false;
+  let customMaxLines = null;
+  const head = content.split('\n', 10);
+  for (const line of head) {
+    if (line.includes('ratchet-ignore-file')) ignoreFile = true;
+    const m = line.match(/ratchet-max-lines:\s*(\d+)/);
+    if (m) {
+      const n = Number(m[1]);
+      if (n > 0) customMaxLines = n;
+    }
+  }
+  return { ignoreFile, customMaxLines };
+}
+
 export function toPosix(p) {
   return p.split(path.sep).join('/');
 }
@@ -157,6 +174,7 @@ function fileMatchesRule(rel, rule) {
 }
 
 export function scanPattern(content, rule) {
+  if (parseHeaderDirectives(content).ignoreFile) return [];
   const re = new RegExp(rule.pattern, rule.flags ?? 'g');
   const stopRe = rule.stopAtPattern ? new RegExp(rule.stopAtPattern) : null;
   const hits = [];
@@ -559,7 +577,7 @@ export function detectProjectProfile(root) {
       extensions: DEFAULT_SOURCE_EXTS,
       ignore: ['src-tauri/target', 'scripts'],
       fileSize: {
-        defaultMaxLines: 450,
+        defaultMaxLines: DEFAULT_MAX_LINES,
         roots: effectiveSizeRoots,
         exclude: ['_tests.rs', 'tests.rs', '_test.go', '_test.py'],
         maxLines: {},
@@ -577,7 +595,7 @@ export function measureConfig(root, config, filterRelSet = null) {
   const fileSizeRoots = config.fileSize?.roots ?? config.roots ?? ['.'];
   const fileSizeExts = config.fileSize?.extensions ?? config.extensions ?? DEFAULT_SOURCE_EXTS;
   const fileSizeExclude = config.fileSize?.exclude ?? [];
-  const defaultMaxLines = config.fileSize?.defaultMaxLines ?? 450;
+  const defaultMaxLines = config.fileSize?.defaultMaxLines ?? DEFAULT_MAX_LINES;
 
   const rawSizeFiles = walkSourceFiles(root, fileSizeRoots, fileSizeExts, ignore).filter(file => {
     const key = relPath(root, file);
@@ -587,11 +605,17 @@ export function measureConfig(root, config, filterRelSet = null) {
 
   const currentMaxLines = {};
   const allLineCounts = {};
+  const customLineCaps = {};
   for (const file of rawSizeFiles) {
     const key = relPath(root, file);
-    const lines = fs.readFileSync(file, 'utf8').split('\n').length;
+    const content = fs.readFileSync(file, 'utf8');
+    const { ignoreFile, customMaxLines } = parseHeaderDirectives(content);
+    if (ignoreFile) continue;
+    if (customMaxLines) customLineCaps[key] = customMaxLines;
+    const lines = content.split('\n').length;
     allLineCounts[key] = lines;
-    if (lines > defaultMaxLines) currentMaxLines[key] = lines;
+    const effDefault = customMaxLines ?? defaultMaxLines;
+    if (lines > effDefault) currentMaxLines[key] = lines;
   }
 
   const allRoots = config.roots ?? ['.'];
@@ -606,6 +630,7 @@ export function measureConfig(root, config, filterRelSet = null) {
       if (!MARKUP_EXTS.has(path.extname(file))) continue;
       const key = relPath(root, file);
       const content = fs.readFileSync(file, 'utf8');
+      if (parseHeaderDirectives(content).ignoreFile) continue;
       for (const issue of scanNestedButton(content)) {
         nestedIssues.push({ file: key, ...issue });
       }
@@ -634,7 +659,7 @@ export function measureConfig(root, config, filterRelSet = null) {
     patternResults.push({ rule, files: ruleFiles, counts, details });
   }
 
-  return { sizeFiles: rawSizeFiles, allLineCounts, currentMaxLines, nestedIssues, patternResults };
+  return { sizeFiles: rawSizeFiles, allLineCounts, customLineCaps, currentMaxLines, nestedIssues, patternResults };
 }
 
 export function initConfig(root) {
@@ -691,12 +716,14 @@ export function runCheck(root, options = {}) {
   const tightenHints = [];
 
   // 1. File line-count watermarks
-  const defaultLimit = config.fileSize?.defaultMaxLines ?? 450;
+  const defaultLimit = config.fileSize?.defaultMaxLines ?? DEFAULT_MAX_LINES;
   for (const [file, lines] of Object.entries(m.allLineCounts)) {
-    const cap = config.fileSize?.maxLines?.[file] ?? defaultLimit;
+    const cap = m.customLineCaps?.[file] ?? config.fileSize?.maxLines?.[file] ?? defaultLimit;
     if (lines > cap) {
-      errors.push(`[file-size] ${file}: ${lines} lines > cap ${cap} lines (extract focused modules instead of bloating this file)`);
-    } else if (config.fileSize?.maxLines?.[file] && lines < config.fileSize.maxLines[file]) {
+      errors.push(
+        `[file-size] ${file}: ${lines} lines > cap ${cap} lines (extract focused modules, or add '// ratchet-max-lines: <N>' in the file header if genuinely cohesive)`
+      );
+    } else if (config.fileSize?.maxLines?.[file] && lines < config.fileSize.maxLines[file] && !m.customLineCaps?.[file]) {
       tightenHints.push(`${file} reduced to ${lines} lines (watermark ${config.fileSize.maxLines[file]})`);
     }
   }
