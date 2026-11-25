@@ -117,6 +117,23 @@ export default CodeRatchetPlugin;
 `;
 }
 
+function buildSlashCommandMarkdown(binPath) {
+  const cmd = quoteCmdPath(binPath);
+  return `---
+description: Initialize, check, or tighten code-ratchet guardrails (.ratchet.json)
+argument-hint: [init | check | tighten | update | status]
+---
+
+Run \`code-ratchet\` against the current workspace using \`$ARGUMENTS\` (default: \`init\` if \`.ratchet.json\` does not exist yet, otherwise \`check\`):
+
+\`\`\`bash
+node ${cmd} \${ARGUMENTS:-check} .
+\`\`\`
+
+If violations are reported, fix them (split oversized files/functions or remove anti-patterns) and re-run \`check\`. When metrics improve below baseline, run \`tighten\` to lock them in.
+`;
+}
+
 export function installHarness(target, options = {}) {
   const home = options.homeDir ?? os.homedir();
   const binPath = options.binPath ?? BIN_PATH;
@@ -145,7 +162,10 @@ export function installHarness(target, options = {}) {
     });
     data.hooks.Stop = list;
     writeJsonAtomic(cfgPath, data);
-    return { target, path: cfgPath, installed: true };
+    const cmdFile = path.join(home, '.claude', 'commands', 'ratchet.md');
+    fs.mkdirSync(path.dirname(cmdFile), { recursive: true });
+    fs.writeFileSync(cmdFile, buildSlashCommandMarkdown(binPath), 'utf8');
+    return { target, path: cfgPath, slashCommand: '/ratchet', installed: true };
   }
 
   if (target === 'codex') {
@@ -176,14 +196,20 @@ export function installHarness(target, options = {}) {
 
     const finalText = content ? `${content}\n\n${block}\n` : `${block}\n`;
     fs.writeFileSync(cfgPath, finalText, 'utf8');
-    return { target, path: cfgPath, installed: true, note: 'Run /hooks once in Codex TUI to trust the hook.' };
+    const promptFile = path.join(home, '.codex', 'prompts', 'ratchet.md');
+    fs.mkdirSync(path.dirname(promptFile), { recursive: true });
+    fs.writeFileSync(promptFile, buildSlashCommandMarkdown(binPath), 'utf8');
+    return { target, path: cfgPath, slashCommand: '/prompts:ratchet', installed: true, note: 'Run /hooks once in Codex TUI to trust the hook.' };
   }
 
   if (target === 'opencode') {
     const pluginPath = path.join(home, '.config', 'opencode', 'plugins', 'code-ratchet.mjs');
     fs.mkdirSync(path.dirname(pluginPath), { recursive: true });
     fs.writeFileSync(pluginPath, buildOpenCodePluginSource(corePath), 'utf8');
-    return { target, path: pluginPath, installed: true };
+    const cmdFile = path.join(home, '.config', 'opencode', 'commands', 'ratchet.md');
+    fs.mkdirSync(path.dirname(cmdFile), { recursive: true });
+    fs.writeFileSync(cmdFile, buildSlashCommandMarkdown(binPath), 'utf8');
+    return { target, path: pluginPath, slashCommand: '/ratchet', installed: true };
   }
 
   if (target === 'droid') {
@@ -202,7 +228,10 @@ export function installHarness(target, options = {}) {
     });
     data.hooks.Stop = list;
     writeJsonAtomic(cfgPath, data);
-    return { target, path: cfgPath, installed: true };
+    const cmdFile = path.join(home, '.factory', 'commands', 'ratchet.md');
+    fs.mkdirSync(path.dirname(cmdFile), { recursive: true });
+    fs.writeFileSync(cmdFile, buildSlashCommandMarkdown(binPath), 'utf8');
+    return { target, path: cfgPath, slashCommand: '/ratchet', installed: true };
   }
 
   if (target === 'kiro') {
@@ -234,7 +263,10 @@ export function installHarness(target, options = {}) {
     });
     data.hooks.stop = list;
     writeJsonAtomic(cfgPath, data);
-    return { target, path: cfgPath, installed: true };
+    const cmdFile = path.join(home, '.cursor', 'commands', 'ratchet.md');
+    fs.mkdirSync(path.dirname(cmdFile), { recursive: true });
+    fs.writeFileSync(cmdFile, buildSlashCommandMarkdown(binPath), 'utf8');
+    return { target, path: cfgPath, slashCommand: '/ratchet', installed: true };
   }
 
   if (target === 'cline') {
@@ -275,7 +307,10 @@ export function installHarness(target, options = {}) {
     });
     data.hooks.pre_run_command = list;
     writeJsonAtomic(cfgPath, data);
-    return { target, path: cfgPath, installed: true };
+    const wfFile = path.join(home, '.codeium', 'windsurf', 'global_workflows', 'ratchet.md');
+    fs.mkdirSync(path.dirname(wfFile), { recursive: true });
+    fs.writeFileSync(wfFile, buildSlashCommandMarkdown(binPath), 'utf8');
+    return { target, path: cfgPath, slashCommand: '/ratchet', installed: true };
   }
 
   throw new Error(`Unsupported global harness target: ${target}`);
@@ -293,6 +328,7 @@ export function uninstallHarness(target, options = {}) {
   }
 
   if (target === 'claude') {
+    fs.rmSync(path.join(home, '.claude', 'commands', 'ratchet.md'), { force: true });
     const cfgPath = path.join(home, '.claude', 'settings.json');
     if (!fs.existsSync(cfgPath)) return { target, path: cfgPath, removed: false };
     const data = readJsonSafe(cfgPath);
@@ -306,6 +342,7 @@ export function uninstallHarness(target, options = {}) {
   }
 
   if (target === 'codex') {
+    fs.rmSync(path.join(home, '.codex', 'prompts', 'ratchet.md'), { force: true });
     const cfgPath = path.join(home, '.codex', 'config.toml');
     if (!fs.existsSync(cfgPath)) return { target, path: cfgPath, removed: false };
     const cleaned = stripManagedBlock(fs.readFileSync(cfgPath, 'utf8')).trimEnd();
@@ -314,6 +351,7 @@ export function uninstallHarness(target, options = {}) {
   }
 
   if (target === 'opencode') {
+    fs.rmSync(path.join(home, '.config', 'opencode', 'commands', 'ratchet.md'), { force: true });
     const pluginPath = path.join(home, '.config', 'opencode', 'plugins', 'code-ratchet.mjs');
     if (!fs.existsSync(pluginPath)) return { target, path: pluginPath, removed: false };
     fs.rmSync(pluginPath, { force: true });
@@ -321,6 +359,7 @@ export function uninstallHarness(target, options = {}) {
   }
 
   if (target === 'droid') {
+    fs.rmSync(path.join(home, '.factory', 'commands', 'ratchet.md'), { force: true });
     const cfgPath = path.join(home, '.factory', 'settings.json');
     if (!fs.existsSync(cfgPath)) return { target, path: cfgPath, removed: false };
     const data = readJsonSafe(cfgPath);
@@ -341,6 +380,7 @@ export function uninstallHarness(target, options = {}) {
   }
 
   if (target === 'cursor') {
+    fs.rmSync(path.join(home, '.cursor', 'commands', 'ratchet.md'), { force: true });
     const cfgPath = path.join(home, '.cursor', 'hooks.json');
     if (!fs.existsSync(cfgPath)) return { target, path: cfgPath, removed: false };
     const data = readJsonSafe(cfgPath);
@@ -364,6 +404,7 @@ export function uninstallHarness(target, options = {}) {
   }
 
   if (target === 'windsurf') {
+    fs.rmSync(path.join(home, '.codeium', 'windsurf', 'global_workflows', 'ratchet.md'), { force: true });
     const cfgPath = path.join(home, '.codeium', 'windsurf', 'hooks.json');
     if (!fs.existsSync(cfgPath)) return { target, path: cfgPath, removed: false };
     const data = readJsonSafe(cfgPath);

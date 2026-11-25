@@ -39,6 +39,14 @@ npx code-ratchet init
 
 生成 `.ratchet.json` 后即可全自动运行——每次 AI 改完代码准备收工时，若违规会自动把报错塞回给 AI 逼它当场拆文件、修干净再交差。**没有 `.ratchet.json` 的其他项目 25ms 内静默跳过，零打扰。**
 
+### 3. 或者直接在对话框里输入 `/ratchet` 斜杠命令
+
+挂载完成后，在 **Claude Code**、**Cursor**、**OpenCode**、**Factory Droid**、**Windsurf**、**Antigravity** 聊天框直接输入 **`/ratchet`**（Codex CLI 输入 `/prompts:ratchet`）即可呼出命令：
+- `/ratchet init` —— 自动识别语言并冻结当前老文件与老函数基线
+- `/ratchet check` —— 执行检查并自动修复违规项
+- `/ratchet tighten` —— 重构瘦身后把水位线永久往下锁死
+- `/ratchet status` —— 查看本机各 Harness 挂载状态
+
 ---
 
 ## 已适配的主流 Harness 列表
@@ -64,7 +72,10 @@ npx code-ratchet init
 
 `init` 会自动扫描 `src`、`src-tauri/src`、`crates`、`internal`、`cmd`、`pkg`、`backend`、`server`、`services` 等前后端目录：
 
-- **全语言通用**：单文件行数水位线（新文件默认上限 **800 行**，超标老文件按现状冻结）。若某个核心模块确实内聚偏长，可在文件前 10 行写注释 `// ratchet-max-lines: 1500` 或 `// ratchet-ignore-file` 单独扩容/豁免。
+- **前紧后松，按职责分级（`tierMaxLines`）**：UI 界面组件（`.tsx/.jsx/.vue/.svelte`）严卡 **450 行**；通用脚本与样式（`.ts/.js/.css`）**600 行**；后端核心引擎与状态机（`.rs/.go/.py/.java/.kt/.cs/.cpp`）放宽到 **900 行**。
+- **抓「单函数长度」棘轮（`functionSize`）**：默认严禁新写出超过 **120 行** 的巨无霸函数（存量超长老函数自动拍照免死、只降不升）。
+- **测试、DTO、生成代码自动免检**：全语言单测文件、纯数据结构定义（`dto.rs`、`contracts.ts`、`schema.ts`）、数据库迁移与自动生成代码（`*.gen.*`、`*.pb.*`）默认豁免体积限制。
+- **文件头/函数头特批口子**：遇到确实内聚偏长的特殊大模块，在文件前 10 行写 `// ratchet-max-lines: 1500` 或 `// ratchet-ignore-file`（函数上方写 `// ratchet-max-fn-lines: 200`）即可单独扩容放行。
 - **前端 / TS / Tailwind / Tauri**：禁止新增 `: any` / `as any`、禁止新增 Tailwind 任意像素魔法值（自动提示项目 CSS Token）、禁止 `<button>` 非法嵌套、Tauri 前后端 IPC 命令双向对账。
 - **Rust**：禁止在生产代码新增 `.unwrap()`（遇到 `#[cfg(test)]` 或 `#[cfg(all(test, ...))]` 自动停手，绝不误伤单测）。
 - **Go**：禁止在非 `cmd/` 业务包新增 `panic(`。

@@ -20,6 +20,7 @@
     "src",
     "scripts",
     "skills",
+    "commands",
     "assets",
     "hooks",
     ".claude-plugin",

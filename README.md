@@ -36,6 +36,14 @@ npx code-ratchet init
 
 Commit the generated `.ratchet.json`. Repositories **without** `.ratchet.json` are completely ignored (<25ms silent exit).
 
+### 3. Or use the `/ratchet` slash command directly in chat
+
+Once installed, type `/ratchet` in **Claude Code**, **Cursor**, **OpenCode**, **Factory Droid**, **Windsurf**, or **Antigravity** (or `/prompts:ratchet` in **Codex CLI**):
+- `/ratchet init` — Initialize `.ratchet.json` and freeze current legacy baselines
+- `/ratchet check` — Scan for regressions and fix any violations
+- `/ratchet tighten` — Permanently lower watermarks after refactoring
+- `/ratchet status` — Check hook installation status across harnesses
+
 ---
 
 ## Supported Harnesses
@@ -61,7 +69,10 @@ Commit the generated `.ratchet.json`. Repositories **without** `.ratchet.json` a
 
 `code-ratchet init` inspects manifests and source roots (`src`, `src-tauri/src`, `crates`, `internal`, `cmd`, `pkg`, `backend`, `server`, `services`, `app`, `lib`, `Sources`, `packages`) and configures stack-appropriate rules out of the box:
 
-- **All Languages**: Per-file line-count watermarks (`fileSize`, default **800 lines** for new files; existing larger files frozen at current line count). Legitimately large cohesive modules can declare `// ratchet-max-lines: 1500` or `// ratchet-ignore-file` in the first 10 lines.
+- **Tiered File-Size Caps (`tierMaxLines`)**: Tight on UI components (`.tsx/.jsx/.vue/.svelte`: **450 lines**), moderate on general scripts (`.ts/.js/.css`: **600 lines**), and generous on cohesive backend engines (`.rs/.go/.py/.java/.kt/.cs/.cpp`: **900 lines**).
+- **Single-Function Length Ratchet (`functionSize`)**: Blocks newly written >**120-line** mega-functions across brace languages and Python while freezing existing legacy long functions in place.
+- **Smart Auto-Exemptions**: Unit test files (`_tests.rs`, `_test.go`, `.test.ts`, etc.), pure DTO/contract/schema definitions (`dto.rs`, `contracts.ts`, `schema.ts`), migrations, and generated code (`*.gen.*`, `*.pb.*`) are automatically excluded from size caps.
+- **Pragmatic Escape Hatches**: Add `// ratchet-max-lines: 1500` or `// ratchet-ignore-file` in the first 10 lines for legitimately large cohesive modules, or `// ratchet-max-fn-lines: 200` above a function.
 - **TypeScript / JavaScript / Tailwind / UI**:
   - `ts-explicit-any`: Blocks new `: any` / `as any`.
   - `tailwind-arbitrary-px`: Blocks new magic pixel/rem utilities (`text-[11px]`, `rounded-[14px]`) and suggests your CSS theme tokens.

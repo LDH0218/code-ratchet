@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { initConfig, runCheck, tightenConfig } from '../src/core.mjs';
+import { defaultCapForFile, initConfig, isSizeExemptPath, runCheck, scanFunctions, tightenConfig } from '../src/core.mjs';
 import { detectHarness, evaluateHookResult } from '../src/hook.mjs';
 import {
   GLOBAL_HARNESSES,
@@ -234,4 +234,52 @@ test('detectHarness handles explicit overrides and payload signatures without ge
   assert.equal(detectHarness({ hook_event_name: 'stop' }), 'cursor');
   assert.equal(detectHarness({ hook_event_name: 'Stop' }), 'claude');
   assert.equal(detectHarness({ continuationActive: false }), 'antigravity');
+});
+
+test('tiered caps, DTO/test exemptions, function-size ratchet, and /ratchet slash commands work end-to-end', async () => {
+  await withTempDir(async root => {
+    // 1. Tiered caps: UI 450, TS 600, Rust/Go/Py 900
+    assert.equal(defaultCapForFile('src/features/App.tsx'), 450);
+    assert.equal(defaultCapForFile('src/lib/store.ts'), 600);
+    assert.equal(defaultCapForFile('src-tauri/src/engine.rs'), 900);
+
+    // 2. DTO, contracts, schema, generated, and frontend test files are auto-exempt
+    assert.equal(isSizeExemptPath('src-tauri/src/commands/dto.rs'), true);
+    assert.equal(isSizeExemptPath('src/lib/contracts.ts'), true);
+    assert.equal(isSizeExemptPath('src/store/chat.test.mjs'), true);
+    assert.equal(isSizeExemptPath('api/service.pb.go'), true);
+    assert.equal(isSizeExemptPath('src/features/chat.tsx'), false);
+
+    // 3. Function-size ratchet blocks newly added >120-line mega-functions
+    fs.writeFileSync(path.join(root, 'tsconfig.json'), '{}');
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'svc.ts'), 'export function small() {\n  return 1;\n}\n');
+    initConfig(root);
+    assert.equal(runCheck(root).ok, true);
+
+    const megaBody = Array.from({ length: 130 }, (_, i) => `  const v${i} = ${i};`).join('\n');
+    fs.writeFileSync(path.join(root, 'src', 'svc.ts'), `export function megaFn() {\n${megaBody}\n  return v0;\n}\n`);
+    const res = runCheck(root);
+    assert.equal(res.ok, false);
+    assert.ok(res.errors.some(e => e.includes('[function-size] src/svc.ts::megaFn')));
+
+    // Function-level escape hatch allows intentional cohesive function
+    fs.writeFileSync(
+      path.join(root, 'src', 'svc.ts'),
+      `// ratchet-max-fn-lines: 160\nexport function megaFn() {\n${megaBody}\n  return v0;\n}\n`
+    );
+    assert.equal(runCheck(root).ok, true);
+    assert.equal(scanFunctions('def py_fn():\n  a = 1\n  return a\n', '.py')[0].lines, 3);
+
+    // 4. Slash command /ratchet installed & removed cleanly
+    const fakeHome = path.join(root, 'home');
+    installHarness('claude', { homeDir: fakeHome });
+    installHarness('cursor', { homeDir: fakeHome });
+    installHarness('opencode', { homeDir: fakeHome });
+    assert.ok(fs.existsSync(path.join(fakeHome, '.claude', 'commands', 'ratchet.md')));
+    assert.ok(fs.existsSync(path.join(fakeHome, '.cursor', 'commands', 'ratchet.md')));
+    assert.ok(fs.existsSync(path.join(fakeHome, '.config', 'opencode', 'commands', 'ratchet.md')));
+    uninstallHarness('claude', { homeDir: fakeHome });
+    assert.ok(!fs.existsSync(path.join(fakeHome, '.claude', 'commands', 'ratchet.md')));
+  });
 });

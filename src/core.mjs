@@ -3,37 +3,80 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 
 export const CONFIG_NAME = '.ratchet.json';
+export const DEFAULT_MAX_LINES = 800;
+export const DEFAULT_MAX_FN_LINES = 120;
+
+// Tiered file-size caps by responsibility: tight on UI, moderate on scripts, generous on backend engines
+export const DEFAULT_TIER_MAX_LINES = {
+  '.tsx': 450,
+  '.jsx': 450,
+  '.vue': 450,
+  '.svelte': 450,
+  '.ts': 600,
+  '.js': 600,
+  '.mjs': 600,
+  '.cjs': 600,
+  '.css': 600,
+  '.scss': 600,
+  '.rs': 900,
+  '.go': 900,
+  '.py': 900,
+  '.java': 900,
+  '.kt': 900,
+  '.kts': 900,
+  '.scala': 900,
+  '.cs': 900,
+  '.c': 900,
+  '.cc': 900,
+  '.cpp': 900,
+  '.cxx': 900,
+  '.h': 900,
+  '.hpp': 900,
+  '.rb': 900,
+  '.php': 900,
+  '.swift': 900,
+  '.dart': 900,
+  '.ex': 900,
+  '.exs': 900,
+  '.zig': 900,
+};
+
+// Tests, pure DTO/contract/schema definitions, migrations, and generated code are exempt from line/function caps
+export const DEFAULT_SIZE_EXCLUDES = [
+  '_tests.rs',
+  'tests.rs',
+  '_test.rs',
+  '_test.go',
+  '_test.py',
+  '/test_',
+  '.test.',
+  '.spec.',
+  'Test.java',
+  'Test.kt',
+  '/tests/',
+  '/Tests/',
+  '/__tests__/',
+  'dto.rs',
+  'dto.ts',
+  'dto.py',
+  'dto.go',
+  'contracts.ts',
+  'schema.ts',
+  'schema.rs',
+  'types.ts',
+  '.d.ts',
+  '.gen.',
+  '.pb.',
+  '_generated.',
+  '/generated/',
+  '/migrations/',
+];
 
 export const IGNORED_DIRS = new Set([
-  '.git',
-  '.hg',
-  '.svn',
-  'node_modules',
-  'dist',
-  'build',
-  'out',
-  'target',
-  'bin',
-  'obj',
-  '.next',
-  '.nuxt',
-  '.svelte-kit',
-  '.turbo',
-  'coverage',
-  'venv',
-  '.venv',
-  '__pycache__',
-  '.pytest_cache',
-  '.mypy_cache',
-  '.ruff_cache',
-  'vendor',
-  '.build',
-  '.gradle',
-  '.mvn',
-  '.dart_tool',
-  'cmake-build-debug',
-  'cmake-build-release',
-  'Pods',
+  '.git', '.hg', '.svn', 'node_modules', 'dist', 'build', 'out', 'target', 'bin', 'obj',
+  '.next', '.nuxt', '.svelte-kit', '.turbo', 'coverage', 'venv', '.venv', '__pycache__',
+  '.pytest_cache', '.mypy_cache', '.ruff_cache', 'vendor', '.build', '.gradle', '.mvn',
+  '.dart_tool', 'cmake-build-debug', 'cmake-build-release', 'Pods',
 ]);
 
 export const DEFAULT_SOURCE_EXTS = [
@@ -48,8 +91,10 @@ export const DEFAULT_SOURCE_EXTS = [
 ];
 
 const MARKUP_EXTS = new Set(['.tsx', '.jsx', '.vue', '.svelte', '.html']);
-
-export const DEFAULT_MAX_LINES = 800;
+const BRACE_FN_EXTS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.rs', '.go', '.java', '.kt', '.cs', '.c', '.cc', '.cpp', '.cxx', '.swift', '.dart', '.php',
+]);
 
 export function parseHeaderDirectives(content) {
   let ignoreFile = false;
@@ -64,6 +109,150 @@ export function parseHeaderDirectives(content) {
     }
   }
   return { ignoreFile, customMaxLines };
+}
+
+export function isSizeExemptPath(rel, excludeList = DEFAULT_SIZE_EXCLUDES) {
+  const normalized = `/${rel}`;
+  return excludeList.some(ex => (ex.startsWith('/') ? normalized.includes(ex) : rel.includes(ex)));
+}
+
+export function defaultCapForFile(rel, fileSizeCfg = {}) {
+  const ext = path.extname(rel);
+  const tiers = fileSizeCfg.tierMaxLines ?? DEFAULT_TIER_MAX_LINES;
+  if (tiers && typeof tiers[ext] === 'number') return tiers[ext];
+  return fileSizeCfg.defaultMaxLines ?? DEFAULT_MAX_LINES;
+}
+
+function stripStringsAndLineComment(line) {
+  let out = '';
+  let inSingle = false;
+  let inDouble = false;
+  let inTick = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    const next = line[i + 1];
+    if (!inSingle && !inDouble && !inTick && ch === '/' && next === '/') break;
+    if (ch === '\\') {
+      i++;
+      continue;
+    }
+    if (!inDouble && !inTick && ch === "'") inSingle = !inSingle;
+    else if (!inSingle && !inTick && ch === '"') inDouble = !inDouble;
+    else if (!inSingle && !inDouble && ch === '`') inTick = !inTick;
+    else if (!inSingle && !inDouble && !inTick) out += ch;
+  }
+  return out;
+}
+
+function detectBraceFnName(trimmed) {
+  let m =
+    trimmed.match(/^(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:unsafe\s+)?(?:const\s+)?fn\s+([A-Za-z_]\w*)/) ||
+    trimmed.match(/^func\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)/) ||
+    trimmed.match(/^(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/) ||
+    trimmed.match(/^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/);
+  if (m) return m[1];
+  m = trimmed.match(
+    /^(?:(?:public|private|protected|internal|static|final|override|virtual|async|suspend|inline)\s+)+(?:[\w<>[\]?,.\s]+?\s+)?([A-Za-z_]\w*)\s*\(/
+  );
+  if (m && !['if', 'for', 'while', 'switch', 'catch', 'match'].includes(m[1])) return m[1];
+  return null;
+}
+
+export function scanFunctions(content, ext) {
+  if (parseHeaderDirectives(content).ignoreFile) return [];
+  const lines = content.split('\n');
+  const rustTestStop = ext === '.rs' ? /^\s*#\[cfg\((?:test\b|all\([^)]*\btest\b)/ : null;
+
+  if (ext === '.py') {
+    const fns = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const prevLine = i > 0 ? lines[i - 1] : '';
+      if (line.includes('ratchet-ignore') || prevLine.includes('ratchet-ignore')) continue;
+      const m = line.match(/^(\s*)(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/);
+      if (!m) continue;
+      const indent = m[1].length;
+      const name = m[2];
+      const overrideMatch = `${prevLine}\n${line}`.match(/ratchet-max-fn-lines:\s*(\d+)/);
+      const customCap = overrideMatch ? Number(overrideMatch[1]) : null;
+      let lastCodeLine = i;
+      for (let j = i + 1; j < lines.length; j++) {
+        const sub = lines[j];
+        const trimmed = sub.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const subIndent = sub.match(/^(\s*)/)[1].length;
+        if (subIndent <= indent) break;
+        lastCodeLine = j;
+      }
+      fns.push({ name, startLine: i + 1, lines: lastCodeLine - i + 1, customCap });
+    }
+    return fns;
+  }
+
+  if (!BRACE_FN_EXTS.has(ext)) return [];
+
+  const fns = [];
+  let braceDepth = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    if (rustTestStop && rustTestStop.test(raw)) break;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+      continue;
+    }
+
+    const prevLine = i > 0 ? lines[i - 1] : '';
+    const candidateName = braceDepth <= 1 ? detectBraceFnName(trimmed) : null;
+    const cleaned = stripStringsAndLineComment(raw);
+
+    if (
+      candidateName &&
+      !raw.includes('ratchet-ignore') &&
+      !prevLine.includes('ratchet-ignore')
+    ) {
+      // Find opening brace on this line or within next 6 signature lines
+      let openLine = -1;
+      let sigDepth = braceDepth;
+      for (let k = i; k < Math.min(lines.length, i + 7); k++) {
+        const seg = stripStringsAndLineComment(lines[k]);
+        if (seg.includes('{')) {
+          openLine = k;
+          break;
+        }
+        if (seg.endsWith(';')) break;
+      }
+      if (openLine !== -1) {
+        let depth = sigDepth;
+        let endLine = openLine;
+        for (let k = openLine; k < lines.length; k++) {
+          if (rustTestStop && k > openLine && rustTestStop.test(lines[k])) break;
+          const seg = stripStringsAndLineComment(lines[k]);
+          for (const ch of seg) {
+            if (ch === '{') depth++;
+            else if (ch === '}') depth--;
+          }
+          if (depth <= sigDepth) {
+            endLine = k;
+            break;
+          }
+        }
+        const overrideMatch = `${prevLine}\n${raw}`.match(/ratchet-max-fn-lines:\s*(\d+)/);
+        const customCap = overrideMatch ? Number(overrideMatch[1]) : null;
+        fns.push({
+          name: candidateName,
+          startLine: i + 1,
+          lines: endLine - i + 1,
+          customCap,
+        });
+      }
+    }
+
+    for (const ch of cleaned) {
+      if (ch === '{') braceDepth++;
+      else if (ch === '}') braceDepth = Math.max(0, braceDepth - 1);
+    }
+  }
+  return fns;
 }
 
 export function toPosix(p) {
@@ -181,9 +370,7 @@ export function scanPattern(content, rule) {
   const lines = content.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (stopRe && stopRe.test(line)) {
-      break;
-    }
+    if (stopRe && stopRe.test(line)) break;
     if (line.includes('ratchet-ignore') && (!line.includes('ratchet-ignore:') || line.includes(`ratchet-ignore:${rule.id}`))) {
       continue;
     }
@@ -321,13 +508,7 @@ export function checkTauriIpc(root, cfg) {
 
 function detectThemeHints(root) {
   const hints = {};
-  const candidates = [
-    'src/index.css',
-    'src/app.css',
-    'src/globals.css',
-    'app/globals.css',
-    'src/styles/globals.css',
-  ];
+  const candidates = ['src/index.css', 'src/app.css', 'src/globals.css', 'app/globals.css', 'src/styles/globals.css'];
   for (const rel of candidates) {
     const full = path.join(root, rel);
     if (!fs.existsSync(full)) continue;
@@ -349,19 +530,8 @@ export function detectProjectProfile(root) {
   const allDeps = { ...(pkg?.dependencies ?? {}), ...(pkg?.devDependencies ?? {}) };
 
   const candidateDirs = [
-    'src',
-    'src-tauri/src',
-    'crates',
-    'internal',
-    'cmd',
-    'pkg',
-    'app',
-    'backend',
-    'server',
-    'services',
-    'lib',
-    'Sources',
-    'packages',
+    'src', 'src-tauri/src', 'crates', 'internal', 'cmd', 'pkg', 'app',
+    'backend', 'server', 'services', 'lib', 'Sources', 'packages',
   ];
   const discoveredRoots = candidateDirs.filter(d => fs.existsSync(path.join(root, d)));
   const roots = discoveredRoots.length > 0 ? discoveredRoots : ['.'];
@@ -383,9 +553,7 @@ export function detectProjectProfile(root) {
     hasAnyExt(allFiles, ['.java', '.kt']);
   const hasKotlin = hasAnyExt(allFiles, ['.kt']);
   const hasDotnet = hasRootFileWithSuffix(root, '.sln') || hasRootFileWithSuffix(root, '.csproj') || hasAnyExt(allFiles, ['.cs']);
-  const hasCpp =
-    fs.existsSync(path.join(root, 'CMakeLists.txt')) ||
-    hasAnyExt(allFiles, ['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp']);
+  const hasCpp = fs.existsSync(path.join(root, 'CMakeLists.txt')) || hasAnyExt(allFiles, ['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp']);
   const hasPhp = fs.existsSync(path.join(root, 'composer.json')) || hasAnyExt(allFiles, ['.php']);
   const hasRuby = fs.existsSync(path.join(root, 'Gemfile')) || hasAnyExt(allFiles, ['.rb']);
 
@@ -578,8 +746,18 @@ export function detectProjectProfile(root) {
       ignore: ['src-tauri/target', 'scripts'],
       fileSize: {
         defaultMaxLines: DEFAULT_MAX_LINES,
+        tierMaxLines: {
+          '.tsx': 450, '.jsx': 450, '.vue': 450, '.svelte': 450,
+          '.ts': 600, '.js': 600, '.mjs': 600,
+          '.rs': 900, '.go': 900, '.py': 900, '.java': 900, '.kt': 900, '.cs': 900, '.cpp': 900,
+        },
         roots: effectiveSizeRoots,
-        exclude: ['_tests.rs', 'tests.rs', '_test.go', '_test.py'],
+        exclude: DEFAULT_SIZE_EXCLUDES,
+        maxLines: {},
+      },
+      functionSize: {
+        enabled: true,
+        defaultMaxLines: DEFAULT_MAX_FN_LINES,
         maxLines: {},
       },
       nestedButton: hasMarkup,
@@ -594,18 +772,23 @@ export function measureConfig(root, config, filterRelSet = null) {
   const ignore = config.ignore ?? [];
   const fileSizeRoots = config.fileSize?.roots ?? config.roots ?? ['.'];
   const fileSizeExts = config.fileSize?.extensions ?? config.extensions ?? DEFAULT_SOURCE_EXTS;
-  const fileSizeExclude = config.fileSize?.exclude ?? [];
-  const defaultMaxLines = config.fileSize?.defaultMaxLines ?? DEFAULT_MAX_LINES;
+  const fileSizeExclude = config.fileSize?.exclude ?? DEFAULT_SIZE_EXCLUDES;
 
   const rawSizeFiles = walkSourceFiles(root, fileSizeRoots, fileSizeExts, ignore).filter(file => {
     const key = relPath(root, file);
-    if (fileSizeExclude.some(ex => key.includes(ex))) return false;
+    if (isSizeExemptPath(key, fileSizeExclude)) return false;
     return !filterRelSet || filterRelSet.has(key);
   });
 
   const currentMaxLines = {};
   const allLineCounts = {};
   const customLineCaps = {};
+  const fnEnabled = config.functionSize?.enabled !== false;
+  const fnDefaultCap = config.functionSize?.defaultMaxLines ?? DEFAULT_MAX_FN_LINES;
+  const allFnLengths = {};
+  const currentMaxFnLines = {};
+  const customFnCaps = {};
+
   for (const file of rawSizeFiles) {
     const key = relPath(root, file);
     const content = fs.readFileSync(file, 'utf8');
@@ -614,8 +797,24 @@ export function measureConfig(root, config, filterRelSet = null) {
     if (customMaxLines) customLineCaps[key] = customMaxLines;
     const lines = content.split('\n').length;
     allLineCounts[key] = lines;
-    const effDefault = customMaxLines ?? defaultMaxLines;
+    const effDefault = customMaxLines ?? defaultCapForFile(key, config.fileSize);
     if (lines > effDefault) currentMaxLines[key] = lines;
+
+    if (fnEnabled) {
+      const fns = scanFunctions(content, path.extname(key));
+      for (const fn of fns) {
+        const fnKey = `${key}::${fn.name}`;
+        const prev = allFnLengths[fnKey] ?? 0;
+        if (fn.lines > prev) {
+          allFnLengths[fnKey] = fn.lines;
+          if (fn.customCap) customFnCaps[fnKey] = fn.customCap;
+        }
+        const effFnCap = fn.customCap ?? fnDefaultCap;
+        if (fn.lines > effFnCap) {
+          currentMaxFnLines[fnKey] = Math.max(currentMaxFnLines[fnKey] ?? 0, fn.lines);
+        }
+      }
+    }
   }
 
   const allRoots = config.roots ?? ['.'];
@@ -659,13 +858,24 @@ export function measureConfig(root, config, filterRelSet = null) {
     patternResults.push({ rule, files: ruleFiles, counts, details });
   }
 
-  return { sizeFiles: rawSizeFiles, allLineCounts, customLineCaps, currentMaxLines, nestedIssues, patternResults };
+  return {
+    sizeFiles: rawSizeFiles,
+    allLineCounts,
+    customLineCaps,
+    currentMaxLines,
+    allFnLengths,
+    customFnCaps,
+    currentMaxFnLines,
+    nestedIssues,
+    patternResults,
+  };
 }
 
 export function initConfig(root) {
   const { stackTags, config } = detectProjectProfile(root);
   const m = measureConfig(root, config);
   config.fileSize.maxLines = m.currentMaxLines;
+  config.functionSize.maxLines = m.currentMaxFnLines;
   for (let i = 0; i < config.patterns.length; i++) {
     config.patterns[i].budget = m.patternResults[i].counts;
   }
@@ -688,6 +898,20 @@ export function tightenConfig(root, allowRaise = false) {
     nextMaxLines[file] = allowRaise || prev === undefined ? lines : Math.min(prev, lines);
   }
   config.fileSize = { ...(config.fileSize ?? {}), maxLines: nextMaxLines };
+
+  if (config.functionSize?.enabled !== false) {
+    const nextMaxFns = {};
+    for (const [fnKey, lines] of Object.entries(m.currentMaxFnLines)) {
+      const prev = config.functionSize?.maxLines?.[fnKey];
+      nextMaxFns[fnKey] = allowRaise || prev === undefined ? lines : Math.min(prev, lines);
+    }
+    config.functionSize = {
+      enabled: true,
+      defaultMaxLines: config.functionSize?.defaultMaxLines ?? DEFAULT_MAX_FN_LINES,
+      ...(config.functionSize ?? {}),
+      maxLines: nextMaxFns,
+    };
+  }
 
   for (let i = 0; i < (config.patterns ?? []).length; i++) {
     const rule = config.patterns[i];
@@ -715,10 +939,10 @@ export function runCheck(root, options = {}) {
   const errors = [];
   const tightenHints = [];
 
-  // 1. File line-count watermarks
-  const defaultLimit = config.fileSize?.defaultMaxLines ?? DEFAULT_MAX_LINES;
+  // 1. Tiered file line-count watermarks
   for (const [file, lines] of Object.entries(m.allLineCounts)) {
-    const cap = m.customLineCaps?.[file] ?? config.fileSize?.maxLines?.[file] ?? defaultLimit;
+    const tierCap = defaultCapForFile(file, config.fileSize);
+    const cap = m.customLineCaps?.[file] ?? config.fileSize?.maxLines?.[file] ?? tierCap;
     if (lines > cap) {
       errors.push(
         `[file-size] ${file}: ${lines} lines > cap ${cap} lines (extract focused modules, or add '// ratchet-max-lines: <N>' in the file header if genuinely cohesive)`
@@ -728,7 +952,22 @@ export function runCheck(root, options = {}) {
     }
   }
 
-  // 2. Anti-pattern ratchets
+  // 2. Single-function length watermarks (only enforced when functionSize section is present in .ratchet.json)
+  if (config.functionSize && config.functionSize.enabled !== false) {
+    const fnDefault = config.functionSize.defaultMaxLines ?? DEFAULT_MAX_FN_LINES;
+    for (const [fnKey, lines] of Object.entries(m.allFnLengths)) {
+      const cap = m.customFnCaps?.[fnKey] ?? config.functionSize.maxLines?.[fnKey] ?? fnDefault;
+      if (lines > cap) {
+        errors.push(
+          `[function-size] ${fnKey}: ${lines} lines > cap ${cap} lines (split into smaller helper functions, or add '// ratchet-max-fn-lines: <N>' above signature)`
+        );
+      } else if (config.functionSize.maxLines?.[fnKey] && lines < config.functionSize.maxLines[fnKey] && !m.customFnCaps?.[fnKey]) {
+        tightenHints.push(`fn ${fnKey} reduced to ${lines} lines (watermark ${config.functionSize.maxLines[fnKey]})`);
+      }
+    }
+  }
+
+  // 3. Anti-pattern ratchets
   for (const { rule, files, counts, details } of m.patternResults) {
     for (const file of files) {
       const key = relPath(root, file);
@@ -750,12 +989,12 @@ export function runCheck(root, options = {}) {
     }
   }
 
-  // 3. Interactive nested-button check
+  // 4. Interactive nested-button check
   for (const issue of m.nestedIssues) {
     errors.push(`[nested-button] ${issue.file}:${issue.line} ${issue.message}`);
   }
 
-  // 4. Optional Tauri bidirectional IPC sync
+  // 5. Optional Tauri bidirectional IPC sync
   let ipcCount = 0;
   if (config.tauriIpc) {
     const ipc = checkTauriIpc(root, config.tauriIpc);
@@ -763,7 +1002,7 @@ export function runCheck(root, options = {}) {
     errors.push(...ipc.errors);
   }
 
-  // 5. Optional custom fast project checks
+  // 6. Optional custom fast project checks
   for (const extra of config.extraChecks ?? []) {
     if (!extra?.command) continue;
     try {
