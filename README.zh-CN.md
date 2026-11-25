@@ -17,35 +17,35 @@
 
 ## 三十秒上手
 
-### 1. 在电脑上挂载 AI 工具钩子（每台电脑只需跑一次）
+### 1. 在电脑上安装插件（每台电脑只需跑一次）
 
+**方式 A：一键通装本机所有已检测到的 AI 工具（推荐）**
 ```bash
-# 自动检测本机已安装的 AI 工具并挂载收工钩子
-npx code-ratchet install
-
-# 或指定挂载目标
-npx code-ratchet install --claude --codex --opencode --cursor --cline --windsurf
-npx code-ratchet status
+npx github:LDH0218/code-ratchet install
+npx github:LDH0218/code-ratchet status
 ```
+> 安装时会自动将零依赖运行时持久化到 `~/.code-ratchet/runtime/`，即便后续清理 npm 缓存或断网离线，钩子与 `/ratchet` 命令也永久秒开。
 
-> 注：挂载到 Codex CLI 后，首次打开 Codex TUI 输入一次 `/hooks` 确认信任即可生效。
+**方式 B：通过 Codex / Claude 原生插件市场安装**
+```bash
+# OpenAI Codex CLI / Codex App
+codex plugin marketplace add LDH0218/code-ratchet
+codex plugin add ratchet@code-ratchet
+
+# Claude Code（在对话输入框中执行）
+/plugin marketplace add LDH0218/code-ratchet
+/plugin install ratchet@code-ratchet
+```
 
 ### 2. 在任意项目中开启保护（每个项目只需跑一次）
 
-```bash
-cd /path/to/your-project
-npx code-ratchet init
-```
-
-生成 `.ratchet.json` 后即可全自动运行——每次 AI 改完代码准备收工时，若违规会自动把报错塞回给 AI 逼它当场拆文件、修干净再交差。**没有 `.ratchet.json` 的其他项目 25ms 内静默跳过，零打扰。**
-
-### 3. 或者直接在对话框里输入 `/ratchet` 斜杠命令
-
-挂载完成后，在 **Claude Code**、**Cursor**、**OpenCode**、**Factory Droid**、**Windsurf**、**Antigravity** 聊天框直接输入 **`/ratchet`**（Codex CLI 输入 `/prompts:ratchet`）即可呼出命令：
+直接在 **Codex**、**Claude Code**、**Cursor**、**OpenCode**、**Factory Droid**、**Windsurf**、**VS Code Copilot**、**Antigravity** 对话框里输入 **`/ratchet`**（或终端执行 `npx code-ratchet init`）：
 - `/ratchet init` —— 自动识别语言并冻结当前老文件与老函数基线
 - `/ratchet check` —— 执行检查并自动修复违规项
 - `/ratchet tighten` —— 重构瘦身后把水位线永久往下锁死
 - `/ratchet status` —— 查看本机各 Harness 挂载状态
+
+生成 `.ratchet.json` 后即可全自动运行——每次 AI 改完代码准备收工时，若违规会自动把报错塞回给 AI 逼它当场拆文件、修干净再交差。**没有 `.ratchet.json` 的其他项目 25ms 内静默跳过，零打扰。**
 
 ---
 

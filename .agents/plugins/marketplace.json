@@ -1,0 +1,21 @@
+{
+  "name": "code-ratchet",
+  "interface": {
+    "displayName": "Code Ratchet"
+  },
+  "plugins": [
+    {
+      "name": "ratchet",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/LDH0218/code-ratchet.git",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "code-ratchet",
+  "description": "Zero-dependency polyglot quality ratchet & Stop-hook guardrails (.ratchet.json) for AI coding.",
+  "owner": {
+    "name": "juzi",
+    "url": "https://github.com/LDH0218"
+  },
+  "plugins": [
+    {
+      "name": "ratchet",
+      "description": "Freeze legacy file/function sizes and anti-patterns in .ratchet.json and block regressions automatically.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

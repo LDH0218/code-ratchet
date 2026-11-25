@@ -1,0 +1,41 @@
+{
+  "name": "ratchet",
+  "version": "1.0.0",
+  "description": "Zero-dependency polyglot quality ratchet & completion-hook guardrails (.ratchet.json) for AI coding.",
+  "author": {
+    "name": "juzi",
+    "url": "https://github.com/LDH0218"
+  },
+  "homepage": "https://github.com/LDH0218/code-ratchet",
+  "repository": "https://github.com/LDH0218/code-ratchet",
+  "license": "MIT",
+  "keywords": [
+    "ratchet",
+    "guardrails",
+    "code-quality",
+    "hooks",
+    "technical-debt"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Code Ratchet",
+    "shortDescription": "Freeze legacy debt & block AI regressions",
+    "longDescription": "Snapshots legacy file/function sizes and anti-pattern counts into .ratchet.json so untouched code passes while any new bloat or regression is blocked before completion.",
+    "developerName": "juzi",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Instructions",
+      "Lifecycle hooks"
+    ],
+    "websiteURL": "https://github.com/LDH0218/code-ratchet",
+    "defaultPrompt": [
+      "Run /ratchet init to freeze current baselines.",
+      "Run /ratchet check and fix any regressions.",
+      "Run /ratchet tighten after refactoring."
+    ],
+    "brandColor": "#10B981",
+    "composerIcon": "./assets/logo.svg",
+    "logo": "./assets/logo.svg"
+  }
+}

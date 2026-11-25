@@ -216,13 +216,15 @@ test('installer idempotently installs and cleanly uninstalls all 7 global harnes
     const repo = path.join(fakeHome, 'repo');
     fs.mkdirSync(repo, { recursive: true });
     execSync('git init', { cwd: repo, stdio: 'ignore' });
-    installCopilotRepoHook(repo);
+    installCopilotRepoHook(repo, { homeDir: fakeHome });
     installGitHook(repo);
     assert.ok(fs.existsSync(path.join(repo, '.github', 'hooks', 'code-ratchet.json')));
+    assert.ok(fs.existsSync(path.join(repo, '.github', 'prompts', 'ratchet.prompt.md')));
     assert.ok(fs.existsSync(path.join(repo, '.git', 'hooks', 'pre-commit')));
     uninstallCopilotRepoHook(repo);
     uninstallGitHook(repo);
     assert.ok(!fs.existsSync(path.join(repo, '.github', 'hooks', 'code-ratchet.json')));
+    assert.ok(!fs.existsSync(path.join(repo, '.github', 'prompts', 'ratchet.prompt.md')));
     assert.ok(!fs.existsSync(path.join(repo, '.git', 'hooks', 'pre-commit')));
   });
 });
@@ -271,15 +273,22 @@ test('tiered caps, DTO/test exemptions, function-size ratchet, and /ratchet slas
     assert.equal(runCheck(root).ok, true);
     assert.equal(scanFunctions('def py_fn():\n  a = 1\n  return a\n', '.py')[0].lines, 3);
 
-    // 4. Slash command /ratchet installed & removed cleanly
+    // 4. Slash command /ratchet installed & removed cleanly (including Codex native skill + persistent runtime)
     const fakeHome = path.join(root, 'home');
-    installHarness('claude', { homeDir: fakeHome });
+    const claudeRes = installHarness('claude', { homeDir: fakeHome });
+    const codexRes = installHarness('codex', { homeDir: fakeHome });
     installHarness('cursor', { homeDir: fakeHome });
     installHarness('opencode', { homeDir: fakeHome });
+    assert.equal(claudeRes.slashCommand, '/ratchet');
+    assert.equal(codexRes.slashCommand, '/ratchet');
+    assert.ok(fs.existsSync(path.join(fakeHome, '.code-ratchet', 'runtime', 'bin', 'code-ratchet.mjs')));
     assert.ok(fs.existsSync(path.join(fakeHome, '.claude', 'commands', 'ratchet.md')));
+    assert.ok(fs.existsSync(path.join(fakeHome, '.codex', 'skills', 'ratchet', 'SKILL.md')));
     assert.ok(fs.existsSync(path.join(fakeHome, '.cursor', 'commands', 'ratchet.md')));
     assert.ok(fs.existsSync(path.join(fakeHome, '.config', 'opencode', 'commands', 'ratchet.md')));
     uninstallHarness('claude', { homeDir: fakeHome });
+    uninstallHarness('codex', { homeDir: fakeHome });
     assert.ok(!fs.existsSync(path.join(fakeHome, '.claude', 'commands', 'ratchet.md')));
+    assert.ok(!fs.existsSync(path.join(fakeHome, '.codex', 'skills', 'ratchet', 'SKILL.md')));
   });
 });

@@ -16,33 +16,35 @@ Markdown rules (`CLAUDE.md` / `AGENTS.md`) get ignored under context pressure, w
 
 ## Quick Start
 
-### 1. Install hooks into your local AI harnesses (once per machine)
+### 1. Install into your AI coding harnesses (once per machine)
 
+**Option A: One-command auto-install across all local harnesses (Recommended)**
 ```bash
-# Auto-detect and install hooks into all local AI harnesses
-npx code-ratchet install
+npx github:LDH0218/code-ratchet install
+npx github:LDH0218/code-ratchet status
+```
+> Automatically persists the zero-dependency runtime into `~/.code-ratchet/runtime/`, so hooks and `/ratchet` stay fast and offline-ready even after clearing npm caches.
 
-# Or target specific harnesses explicitly
-npx code-ratchet install --claude --codex --opencode --cursor --cline --windsurf
-npx code-ratchet status
+**Option B: Native Plugin Marketplaces (Codex & Claude Code)**
+```bash
+# OpenAI Codex CLI / Codex App
+codex plugin marketplace add LDH0218/code-ratchet
+codex plugin add ratchet@code-ratchet
+
+# Claude Code (run inside chat)
+/plugin marketplace add LDH0218/code-ratchet
+/plugin install ratchet@code-ratchet
 ```
 
 ### 2. Enable in any repository (once per repo)
 
-```bash
-cd /path/to/your-project
-npx code-ratchet init
-```
-
-Commit the generated `.ratchet.json`. Repositories **without** `.ratchet.json` are completely ignored (<25ms silent exit).
-
-### 3. Or use the `/ratchet` slash command directly in chat
-
-Once installed, type `/ratchet` in **Claude Code**, **Cursor**, **OpenCode**, **Factory Droid**, **Windsurf**, or **Antigravity** (or `/prompts:ratchet` in **Codex CLI**):
+Type **`/ratchet`** directly in **Codex**, **Claude Code**, **Cursor**, **OpenCode**, **Factory Droid**, **Windsurf**, **VS Code Copilot**, or **Antigravity** (or run `npx code-ratchet init` in your terminal):
 - `/ratchet init` — Initialize `.ratchet.json` and freeze current legacy baselines
 - `/ratchet check` — Scan for regressions and fix any violations
 - `/ratchet tighten` — Permanently lower watermarks after refactoring
 - `/ratchet status` — Check hook installation status across harnesses
+
+Commit the generated `.ratchet.json`. Repositories **without** `.ratchet.json` are completely ignored (<25ms silent exit).
 
 ---
 

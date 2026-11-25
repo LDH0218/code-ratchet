@@ -7,7 +7,9 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/stop-hook.mjs\" --harness claude",
-            "timeout": 20
+            "commandWindows": "if (Get-Command node -ErrorAction SilentlyContinue) { node \"$env:CLAUDE_PLUGIN_ROOT\\scripts\\stop-hook.mjs\" --harness claude }",
+            "timeout": 20,
+            "statusMessage": "Running code-ratchet guardrails..."
           }
         ]
       }

@@ -121,7 +121,7 @@ function buildSlashCommandMarkdown(binPath) {
   const cmd = quoteCmdPath(binPath);
   return `---
 description: Initialize, check, or tighten code-ratchet guardrails (.ratchet.json)
-argument-hint: [init | check | tighten | update | status]
+argument-hint: "[init | check | tighten | update | status]"
 ---
 
 Run \`code-ratchet\` against the current workspace using \`$ARGUMENTS\` (default: \`init\` if \`.ratchet.json\` does not exist yet, otherwise \`check\`):
@@ -134,15 +134,61 @@ If violations are reported, fix them (split oversized files/functions or remove 
 `;
 }
 
+function buildCodexSkillMarkdown(binPath) {
+  const cmd = quoteCmdPath(binPath);
+  return `---
+name: ratchet
+description: Manage code-ratchet guardrails (.ratchet.json) via /ratchet — initialize tiered file & function-size baselines, run checks, tighten watermarks, or inspect harness status across frontend and backend languages.
+argument-hint: "[init | check | tighten | update | status]"
+license: MIT
+---
+
+# /ratchet — Code Ratchet Guardrails
+
+Run \`code-ratchet\` in the current workspace according to the subcommand argument (default to \`check\` if \`.ratchet.json\` exists, or \`init\` if \`.ratchet.json\` does not exist yet):
+
+\`\`\`bash
+node ${cmd} <init|check|tighten|update|status> .
+\`\`\`
+
+- If \`check\` reports regressions, refactor and fix every reported file-size, function-size, or anti-pattern violation, then re-run \`check\`.
+- After refactoring reduces violations or line counts below baseline, run \`tighten\` to lock in the lower watermarks.
+`;
+}
+
+export function ensureManagedRuntime(homeDir, options = {}) {
+  if (options.binPath && options.corePath) {
+    return { binPath: options.binPath, corePath: options.corePath };
+  }
+  const runtimeRoot = path.join(homeDir, '.code-ratchet', 'runtime');
+  fs.mkdirSync(runtimeRoot, { recursive: true });
+  for (const sub of ['bin', 'src', 'scripts', 'skills', 'commands']) {
+    const srcSub = path.join(PKG_ROOT, sub);
+    if (fs.existsSync(srcSub)) {
+      copyDirRecursive(srcSub, path.join(runtimeRoot, sub));
+    }
+  }
+  const pkgJson = path.join(PKG_ROOT, 'package.json');
+  if (fs.existsSync(pkgJson)) {
+    fs.copyFileSync(pkgJson, path.join(runtimeRoot, 'package.json'));
+  }
+  return {
+    binPath: options.binPath ?? path.join(runtimeRoot, 'bin', 'code-ratchet.mjs'),
+    corePath: options.corePath ?? path.join(runtimeRoot, 'src', 'core.mjs'),
+  };
+}
+
 export function installHarness(target, options = {}) {
   const home = options.homeDir ?? os.homedir();
-  const binPath = options.binPath ?? BIN_PATH;
-  const corePath = options.corePath ?? CORE_PATH;
+  const { binPath, corePath } =
+    target === 'antigravity'
+      ? { binPath: options.binPath ?? BIN_PATH, corePath: options.corePath ?? CORE_PATH }
+      : ensureManagedRuntime(home, options);
 
   if (target === 'antigravity') {
     const pluginDir = path.join(home, '.gemini', 'config', 'plugins', 'code-ratchet');
     copyDirRecursive(PKG_ROOT, pluginDir);
-    return { target, path: pluginDir, installed: true };
+    return { target, path: pluginDir, slashCommand: '/ratchet', installed: true };
   }
 
   if (target === 'claude') {
@@ -196,10 +242,12 @@ export function installHarness(target, options = {}) {
 
     const finalText = content ? `${content}\n\n${block}\n` : `${block}\n`;
     fs.writeFileSync(cfgPath, finalText, 'utf8');
-    const promptFile = path.join(home, '.codex', 'prompts', 'ratchet.md');
-    fs.mkdirSync(path.dirname(promptFile), { recursive: true });
-    fs.writeFileSync(promptFile, buildSlashCommandMarkdown(binPath), 'utf8');
-    return { target, path: cfgPath, slashCommand: '/prompts:ratchet', installed: true, note: 'Run /hooks once in Codex TUI to trust the hook.' };
+    // Remove legacy ~/.codex/prompts/ratchet.md if present and install modern ~/.codex/skills/ratchet/SKILL.md
+    fs.rmSync(path.join(home, '.codex', 'prompts', 'ratchet.md'), { force: true });
+    const skillFile = path.join(home, '.codex', 'skills', 'ratchet', 'SKILL.md');
+    fs.mkdirSync(path.dirname(skillFile), { recursive: true });
+    fs.writeFileSync(skillFile, buildCodexSkillMarkdown(binPath), 'utf8');
+    return { target, path: cfgPath, slashCommand: '/ratchet', installed: true, note: 'Run /hooks once in Codex TUI to trust the hook.' };
   }
 
   if (target === 'opencode') {
@@ -291,7 +339,10 @@ export function installHarness(target, options = {}) {
     } catch {
       /* ignore on Windows */
     }
-    return { target, path: hookFile, installed: true };
+    const wfFile = path.join(home, 'Documents', 'Cline', 'Workflows', 'ratchet.md');
+    fs.mkdirSync(path.dirname(wfFile), { recursive: true });
+    fs.writeFileSync(wfFile, buildSlashCommandMarkdown(binPath), 'utf8');
+    return { target, path: hookFile, slashCommand: '/ratchet.md', installed: true };
   }
 
   if (target === 'windsurf') {
@@ -343,6 +394,7 @@ export function uninstallHarness(target, options = {}) {
 
   if (target === 'codex') {
     fs.rmSync(path.join(home, '.codex', 'prompts', 'ratchet.md'), { force: true });
+    fs.rmSync(path.join(home, '.codex', 'skills', 'ratchet'), { recursive: true, force: true });
     const cfgPath = path.join(home, '.codex', 'config.toml');
     if (!fs.existsSync(cfgPath)) return { target, path: cfgPath, removed: false };
     const cleaned = stripManagedBlock(fs.readFileSync(cfgPath, 'utf8')).trimEnd();
@@ -393,6 +445,7 @@ export function uninstallHarness(target, options = {}) {
   }
 
   if (target === 'cline') {
+    fs.rmSync(path.join(home, 'Documents', 'Cline', 'Workflows', 'ratchet.md'), { force: true });
     const hookFile = path.join(home, 'Documents', 'Cline', 'Hooks', 'PreToolUse');
     if (!fs.existsSync(hookFile)) return { target, path: hookFile, removed: false };
     const content = fs.readFileSync(hookFile, 'utf8');
@@ -421,7 +474,8 @@ export function uninstallHarness(target, options = {}) {
 }
 
 export function installCopilotRepoHook(repoRoot, options = {}) {
-  const binPath = options.binPath ?? BIN_PATH;
+  const home = options.homeDir ?? os.homedir();
+  const { binPath } = ensureManagedRuntime(home, options);
   const cfgPath = path.join(repoRoot, '.github', 'hooks', 'code-ratchet.json');
   const cmd = buildHookCommand('copilot', binPath);
   writeJsonAtomic(cfgPath, {
@@ -437,10 +491,14 @@ export function installCopilotRepoHook(repoRoot, options = {}) {
       ],
     },
   });
-  return { path: cfgPath, installed: true };
+  const promptFile = path.join(repoRoot, '.github', 'prompts', 'ratchet.prompt.md');
+  fs.mkdirSync(path.dirname(promptFile), { recursive: true });
+  fs.writeFileSync(promptFile, buildSlashCommandMarkdown(binPath), 'utf8');
+  return { path: cfgPath, slashCommand: '/ratchet', installed: true };
 }
 
 export function uninstallCopilotRepoHook(repoRoot) {
+  fs.rmSync(path.join(repoRoot, '.github', 'prompts', 'ratchet.prompt.md'), { force: true });
   const cfgPath = path.join(repoRoot, '.github', 'hooks', 'code-ratchet.json');
   if (!fs.existsSync(cfgPath)) return { path: cfgPath, removed: false };
   fs.rmSync(cfgPath, { force: true });
