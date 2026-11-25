@@ -1,0 +1,5 @@
+{
+  "name": "code-ratchet",
+  "version": "1.0.0",
+  "description": "Zero-dependency polyglot ratchet guardrails (.ratchet.json) that freeze legacy technical debt and block AI regressions via Stop hooks."
+}

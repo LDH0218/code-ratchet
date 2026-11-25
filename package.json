@@ -1,0 +1,50 @@
+{
+  "name": "code-ratchet",
+  "version": "1.0.0",
+  "description": "Zero-dependency polyglot quality ratchet & completion-hook guardrails for AI coding harnesses (Claude Code, Codex CLI, OpenCode, Cursor, Cline, GitHub Copilot, Windsurf, Antigravity, Git).",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bin": {
+    "code-ratchet": "./bin/code-ratchet.mjs"
+  },
+  "exports": {
+    ".": "./src/core.mjs",
+    "./hook": "./src/hook.mjs",
+    "./installer": "./src/installer.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "scripts",
+    "skills",
+    "assets",
+    "hooks",
+    ".claude-plugin",
+    "plugin.json",
+    "hooks.json",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/ratchet.test.mjs"
+  },
+  "keywords": [
+    "ai-coding",
+    "ratchet",
+    "guardrails",
+    "claude-code",
+    "codex",
+    "opencode",
+    "cursor",
+    "cline",
+    "copilot",
+    "windsurf",
+    "antigravity",
+    "hooks",
+    "technical-debt"
+  ]
+}

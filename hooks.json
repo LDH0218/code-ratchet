@@ -1,0 +1,11 @@
+{
+  "code-ratchet": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "node ./scripts/stop-hook.mjs --harness antigravity",
+        "timeout": 15
+      }
+    ]
+  }
+}

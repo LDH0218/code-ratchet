@@ -1,0 +1,12 @@
+{
+  "name": "code-ratchet",
+  "displayName": "Code Ratchet",
+  "version": "1.0.0",
+  "description": "Zero-dependency polyglot ratchet guardrails for AI coding: freezes legacy file-size and anti-pattern baselines in .ratchet.json and blocks regressions automatically via Stop hooks.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Initialize code-ratchet for this project",
+    "Run code-ratchet check and fix any new violations",
+    "Tighten the code-ratchet baseline after refactoring"
+  ]
+}
